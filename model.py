@@ -2,6 +2,7 @@
 import numpy
 import yaml
 import time
+import os.path
 
 class EventType(object):
     def __init__(self, name, duration, num_steps, event_log_filename):
@@ -20,7 +21,7 @@ class EventType(object):
     def get_timestamps_in_window(self, begin, end):
         # todo use a database or something.
         for event_ts in self.get_timestamps():
-            if begin <= event_ts <= end:
+            if begin < event_ts <= end:
                 yield event_ts
 
     def get_prediction_weights(self, ts):
@@ -28,6 +29,7 @@ class EventType(object):
 
         for event_ts in self.get_timestamps_in_window(ts - self.duration, ts):
             # todo linear interpolation.
+            # import ipdb; ipdb.set_trace()
             weights[int((ts - event_ts) / (float(self.duration) / self.num_steps))] += 1
 
         return weights
@@ -60,15 +62,20 @@ class StatState(object):
         self.covariance = numpy.matrix(state_dict['covariance'])
         self.measurement_noise = state_dict['measurement_noise']
 
+    def save_state(self, state_filename):
+        with open(state_filename, 'w+') as state_file:
+            yaml.dump(self.to_dict(), stream=state_file)
+
     def to_dict(self):
         return {
             'events': [event.to_dict() for event in self.events],
-            'means': self.means.tolist(),
+            'means': self.means.T.tolist(),
             'covariance': self.covariance.tolist(),
             'measurement_noise': self.measurement_noise,
         }
 
     def update(self, ts, measurement):
+        print "updating with %s / %s" % (ts, measurement)
         self.means, self.covariance = sorta_kalman(
             self.means,
             self.covariance,
