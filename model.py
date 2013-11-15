@@ -26,15 +26,17 @@ class EventType(object):
                 yield event_ts
 
     def get_prediction_weights(self, ts, slew=None):
+
         weights = [0] * self.num_steps
+        step_length = float(self.duration / self.num_steps)
 
         for event_ts in self.get_timestamps_in_window(ts - self.duration, ts):
-            step_length = float(self.duration / self.num_steps)
             left = int((ts - event_ts) / step_length)
             right = (left + 1)
             if self.periodic:
                 right = right % self.num_steps
             else:
+                # maybe this is a bad idea - maybe I should just allow weights that sum to less than 1 per event.
                 right = min(right, self.num_steps - 1)
 
             right_impact = ((ts - event_ts) % step_length) / step_length
@@ -42,6 +44,22 @@ class EventType(object):
 
             weights[left] += left_impact
             weights[right] += right_impact
+
+        if slew:
+            num_steps_to_convolve = slew / step_length
+            normalizer = 1.0 / num_steps_to_convolve
+            convolution = ([normalizer] * int(num_steps_to_convolve)) + [num_steps_to_convolve % 1.0]
+            convolved_weights = numpy.convolve(weights, convolution).tolist()
+
+            weights = convolved_weights[:self.num_steps]
+            if self.periodic:
+                # Periodic things really need to be circularly convolved, so do that.
+                weights = [0] * self.num_steps
+                convolved_weights.extend([0] * self.num_steps)  # extend so this next loop doesn't reach over the end.
+
+                while len(convolved_weights) > self.num_steps:
+                    weights = numpy.add(weights, convolved_weights[:self.num_steps])
+                    convolved_weights = convolved_weights[self.num_steps:]
 
         return weights
 
@@ -126,10 +144,10 @@ class StatState(object):
 
         return expected_value, variance
 
-    def get_prediction_weights(self, ts):
+    def get_prediction_weights(self, ts, slew=None):
         weights = []
         for event in self.events:
-            weights.extend(event.get_prediction_weights(ts))
+            weights.extend(event.get_prediction_weights(ts, slew=slew))
 
         assert len(weights) == len(self.means)
         return numpy.matrix(weights)
