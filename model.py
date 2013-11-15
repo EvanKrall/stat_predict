@@ -28,8 +28,6 @@ class EventType(object):
         weights = [0] * self.num_steps
 
         for event_ts in self.get_timestamps_in_window(ts - self.duration, ts):
-            # todo linear interpolation.
-            # import ipdb; ipdb.set_trace()
             weights[int((ts - event_ts) / (float(self.duration) / self.num_steps))] += 1
 
         return weights
@@ -40,6 +38,16 @@ class EventType(object):
             'duration': self.duration,
             'num_steps': self.num_steps
         }
+
+
+class PeriodicEvent(EventType):
+    def __init__(self, name, duration):
+        self.name = name
+        self.duration = duration
+
+    def get_timestamps_in_window(self, begin, end):
+        first_timestamp = int(begin / self.duration) * self.duration + self.duration
+        return xrange(first_timestamp, end, self.duration)
 
 
 class StatState(object):

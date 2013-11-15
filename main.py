@@ -3,6 +3,7 @@
 Usage:
   main.py update <event_config> <state_file> <ts> <value>
   main.py predict <event_config> <state_file> [<ts>]
+  main.py predict_many <event_config> <state_file> <start> <length> <step>
   main.py get_weights <event_config> <state_file> [<ts>]
   main.py debug <event_config> <state_file>
   main.py train_from_rrd <event_config> <state_file> <rrd_file>
@@ -41,6 +42,12 @@ def main(arguments):
         state.save_state(arguments['<state_file>'])
     elif arguments['predict']:
         print state.predict(ts)
+    elif arguments['predict_many']:
+        start = float(arguments['<start>'])
+        end = start + float(arguments['<length>'])
+        step = float(arguments['<step>'])
+        for ts in xrange(start, end, step):
+            print state.predict(ts)
     elif arguments['get_weights']:
         print state.get_prediction_weights(ts)
     elif arguments['train_from_rrd']:
