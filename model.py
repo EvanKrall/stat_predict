@@ -9,6 +9,7 @@ class EventType(object):
         self.name = name
         self.duration = duration
         self.num_steps = num_steps
+        self.periodic = False
         self.event_log_filename = event_log_filename
 
     def get_timestamps(self):
@@ -41,13 +42,24 @@ class EventType(object):
 
 
 class PeriodicEvent(EventType):
-    def __init__(self, name, duration):
+    # worlds worst OO hierarchy
+    def __init__(self, name, duration, num_steps):
         self.name = name
         self.duration = duration
+        self.num_steps = num_steps
+        self.periodic = True
 
     def get_timestamps_in_window(self, begin, end):
         first_timestamp = int(begin / self.duration) * self.duration + self.duration
         return xrange(first_timestamp, end, self.duration)
+
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'duration': self.duration,
+            'num_steps': self.num_steps,
+            'periodic': True,
+        }
 
 
 class StatState(object):
@@ -63,8 +75,10 @@ class StatState(object):
 
         self.events = []
         for event in state_dict['events']:
-            self.events.append(EventType(event['name'], event['duration'], event['num_steps'], event_config_dict[event['name']]))
-            pass
+            if event.get('periodic'):
+                self.events.append(PeriodicEvent(event['name'], event['duration'], event['num_steps']))
+            else:
+                self.events.append(EventType(event['name'], event['duration'], event['num_steps'], event_config_dict[event['name']]))
 
         self.means = numpy.matrix(state_dict['means']).T
         self.covariance = numpy.matrix(state_dict['covariance'])

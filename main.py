@@ -5,6 +5,7 @@ Usage:
   main.py predict <event_config> <state_file> [<ts>]
   main.py predict_many <event_config> <state_file> <start> <length> <step>
   main.py get_weights <event_config> <state_file> [<ts>]
+  main.py get_weights_many <event_config> <state_file> <start> <length> <step>
   main.py debug <event_config> <state_file>
   main.py train_from_rrd <event_config> <state_file> <rrd_file>
   main.py (-h | --help)
@@ -50,6 +51,13 @@ def main(arguments):
             print state.predict(ts)
     elif arguments['get_weights']:
         print state.get_prediction_weights(ts)
+    elif arguments['get_weights_many']:
+        start = float(arguments['<start>'])
+        end = start + float(arguments['<length>'])
+        step = float(arguments['<step>'])
+        for ts in xrange(start, end, step):
+            print ' '.join([("%0.2f " % weight) for weight in state.get_prediction_weights(ts).tolist()[0] ])
+
     elif arguments['train_from_rrd']:
         for ts, value, timewindow in rrd_dump.parse_rrddump_output(rrd_dump.run_rrddump(arguments['<rrd_file>'])):
             state.update(ts, value)
