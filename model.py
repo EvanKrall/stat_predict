@@ -25,11 +25,23 @@ class EventType(object):
             if begin < event_ts <= end:
                 yield event_ts
 
-    def get_prediction_weights(self, ts):
+    def get_prediction_weights(self, ts, slew=None):
         weights = [0] * self.num_steps
 
         for event_ts in self.get_timestamps_in_window(ts - self.duration, ts):
-            weights[int((ts - event_ts) / (float(self.duration) / self.num_steps))] += 1
+            step_length = float(self.duration / self.num_steps)
+            left = int((ts - event_ts) / step_length)
+            right = (left + 1)
+            if self.periodic:
+                right = right % self.num_steps
+            else:
+                right = min(right, self.num_steps - 1)
+
+            right_impact = ((ts - event_ts) % step_length) / step_length
+            left_impact = 1 - right_impact
+
+            weights[left] += left_impact
+            weights[right] += right_impact
 
         return weights
 
