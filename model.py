@@ -1,8 +1,6 @@
 #!/usr/bin/python
 import numpy
 import yaml
-import time
-import os.path
 
 class EventType(object):
     def __init__(self, name, duration, num_steps, event_log_filename):
@@ -30,20 +28,18 @@ class EventType(object):
         weights = [0] * self.num_steps
         step_length = float(self.duration / self.num_steps)
 
-        for event_ts in self.get_timestamps_in_window(ts - self.duration, ts):
-            left = int((ts - event_ts) / step_length)
-            right = (left + 1)
-            if self.periodic:
-                right = right % self.num_steps
-            else:
-                # maybe this is a bad idea - maybe I should just allow weights that sum to less than 1 per event.
-                right = min(right, self.num_steps - 1)
+        for event_ts in self.get_timestamps_in_window(ts - self.duration - step_length, ts + step_length):
+            location = (ts - event_ts) / step_length
+            left = int(numpy.floor(location))
+            right = int(numpy.ceil(location))
 
-            right_impact = ((ts - event_ts) % step_length) / step_length
+            right_impact = location - left
             left_impact = 1 - right_impact
 
-            weights[left] += left_impact
-            weights[right] += right_impact
+            if 0 <= left and left < self.num_steps:
+                weights[left] += left_impact
+            if 0 <= right and right < self.num_steps:
+                weights[right] += right_impact
 
         if slew:
             num_steps_to_convolve = slew / step_length
@@ -80,8 +76,12 @@ class PeriodicEvent(EventType):
         self.periodic = True
 
     def get_timestamps_in_window(self, begin, end):
-        first_timestamp = int(begin / self.duration) * self.duration + self.duration
-        return xrange(first_timestamp, end, self.duration)
+        first_timestamp = int(begin / self.duration) * self.duration
+        if first_timestamp < begin:
+            first_timestamp += self.duration
+        assert begin <= first_timestamp
+        assert first_timestamp < end
+        return numpy.arange(first_timestamp, end, self.duration)
 
     def to_dict(self):
         return {
@@ -126,13 +126,12 @@ class StatState(object):
             'measurement_noise': self.measurement_noise,
         }
 
-    def update(self, ts, measurement):
-        print "updating with %s / %s" % (ts, measurement)
+    def update(self, ts, measurement, slew=None):
         self.means, self.covariance = sorta_kalman(
             self.means,
             self.covariance,
             measurement,
-            self.get_prediction_weights(ts),
+            self.get_prediction_weights(ts, slew=slew),
             self.measurement_noise
         )
 

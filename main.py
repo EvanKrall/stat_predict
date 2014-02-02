@@ -17,6 +17,7 @@ Options:
 """
 
 from docopt import docopt
+import numpy
 import model
 import time
 import rrd_dump
@@ -83,12 +84,12 @@ def main(arguments):
         end = start + float(arguments['<length>'])
         step = float(arguments['<step>'])
 
-        for ts in xrange(start, end, step):
+        for ts in numpy.arange(start, end, step):
             print ' '.join([("%0.2f " % weight) for weight in state.get_prediction_weights(ts, slew=slew).tolist()[0] ])
 
     elif arguments['train_from_rrd']:
         for ts, value, timewindow in rrd_dump.parse_rrddump_output(rrd_dump.run_rrddump(arguments['<rrd_file>'])):
-            state.update(ts, value)
+            state.update(ts, value, slew=timewindow)
 
         state.save_state(arguments['<state_file>'])
 
