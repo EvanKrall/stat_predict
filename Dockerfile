@@ -10,3 +10,4 @@ RUN mkdir /workdir
 WORKDIR /workdir
 
 RUN apt-get install -y python-lxml
+RUN apt-get install -y python-matplotlib
