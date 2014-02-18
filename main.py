@@ -8,7 +8,6 @@ Usage:
   main.py graph_predict_many <event_config> <state_file> <start> <length> <step>
   main.py get_weights <event_config> <state_file> [<ts>] [<slew>]
   main.py get_weights_many <event_config> <state_file> <start> <length> <step> [<slew>]
-  main.py debug <event_config> <state_file>
   main.py train_from_rrd <event_config> <state_file> <rrd_file>
   main.py (-h | --help)
 
