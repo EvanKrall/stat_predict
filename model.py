@@ -66,6 +66,9 @@ class EventType(object):
             'num_steps': self.num_steps
         }
 
+    def report_measurement_and_prediction_error(self, measurement, prediction_error):
+        # only AR / MA type events actually care about these.
+        pass
 
 class PeriodicEvent(EventType):
     # worlds worst OO hierarchy
@@ -92,6 +95,64 @@ class PeriodicEvent(EventType):
         }
 
 
+class RingBuffer(object):
+    def __init__(self, size_or_list):
+        if hasattr(size_or_list, '__iter__'):
+            self.size = len(size_or_list)
+            self.buffer = numpy.concatenate([size_or_list, size_or_list])
+            self.i = 0
+        else:
+            self.size = size_or_list
+            self.buffer = numpy.zeros(size_or_list * 2)
+            self.i = 0
+
+    def push(self, val):
+        self[0] = val
+        self.i += 1
+
+    def __setitem__(self, i, val):
+        self.buffer[self.getindex(i)] = self.buffer[self.getindex(i) + self.size] = val
+
+    def getindex(self, i):
+        return (i + self.i) % self.size
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            start = self.getindex(i.start) if (i.start is not None) else self.i
+            stop = start + (i.stop - i.start) if (i.stop is not None) else self.i + self.size
+            index = slice(start, stop, i.step)
+        else:
+            index = self.getindex(i)
+        return self.buffer[index]
+
+    def __len__(self):
+        return self.size
+
+    def __iter__(self):
+        return self.buffer[self.i : self.i + self.size].__iter__()
+
+
+class Arma(EventType):
+    def __init__(self, p, q):
+        self.past_y = RingBuffer(p)
+        self.past_epsilon = RingBuffer(q)
+
+    def report_measurement_and_prediction_error(self, measurement, prediction_error):
+        #http://stackoverflow.com/questions/8908998/ring-buffer-with-numpy-ctypes
+        self.past_y.push(measurement)   
+        self.past_epsilon.push(prediction_error)
+
+    def get_prediction_weights(self, ts, slew=None):
+        # todo how the fuck am I going to do slew in ARMA
+        return numpy.concatenate([self.past_y[:], self.past_epsilon[:]])
+
+    def to_dict(self):
+        return {
+            'arma': True,
+            'past_y': self.past_y[:],
+            'past_epsilon': self.past_epsilon[:],
+        }
+
 class StatState(object):
     def __init__(self, event_config, state_file):
         self.load_state(event_config, state_file)
@@ -105,7 +166,9 @@ class StatState(object):
 
         self.events = []
         for event in state_dict['events']:
-            if event.get('periodic'):
+            if event.get('arma'):
+                self.events.append(Arma(event['past_y'], event['past_epsilon']))
+            elif event.get('periodic'):
                 self.events.append(PeriodicEvent(event['name'], event['duration'], event['num_steps']))
             else:
                 self.events.append(EventType(event['name'], event['duration'], event['num_steps'], event_config_dict[event['name']]))
@@ -127,13 +190,19 @@ class StatState(object):
         }
 
     def update(self, ts, measurement, slew=None):
-        self.means, self.covariance = sorta_kalman(
+        self.means, self.covariance, prediction_error = sorta_kalman(
             self.means,
             self.covariance,
             measurement,
             self.get_prediction_weights(ts, slew=slew),
             self.measurement_noise
         )
+
+        self.report_measurement_and_prediction_error(measurement, prediction_error)
+
+    def report_measurement_and_prediction_error(self, measurement, prediction_error):
+        for event in self.events:
+            event.report_measurement_and_prediction_error(measurement, prediction_error)
 
     def predict(self, ts):
         C_t = self.get_prediction_weights(ts)
@@ -155,9 +224,10 @@ class StatState(object):
 def sorta_kalman(means, covariance, measurement, C_t, Q_t):
     # import ipdb; ipdb.set_trace()
     kalman_gain = covariance * C_t.T * (C_t * covariance * C_t.T + Q_t).I
-    means = means + kalman_gain * (measurement - C_t * means)
+    prediction_error = measurement - C_t * means
+    means = means + kalman_gain * (prediction_error)
 
     identity = numpy.identity(means.shape[0])
     covariance = (identity - kalman_gain * C_t) * covariance
 
-    return means, covariance
+    return means, covariance, prediction_error
