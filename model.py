@@ -109,6 +109,7 @@ class RingBuffer(object):
     def push(self, val):
         self[0] = val
         self.i += 1
+        self.i = self.i % self.size
 
     def __setitem__(self, i, val):
         self.buffer[self.getindex(i)] = self.buffer[self.getindex(i) + self.size] = val
@@ -149,8 +150,8 @@ class Arma(EventType):
     def to_dict(self):
         return {
             'arma': True,
-            'past_y': self.past_y[:],
-            'past_epsilon': self.past_epsilon[:],
+            'past_y': self.past_y[:].tolist(),
+            'past_epsilon': self.past_epsilon[:].tolist(),
         }
 
 class StatState(object):
@@ -213,9 +214,7 @@ class StatState(object):
         return expected_value, variance
 
     def get_prediction_weights(self, ts, slew=None):
-        weights = []
-        for event in self.events:
-            weights.extend(event.get_prediction_weights(ts, slew=slew))
+        weights = numpy.concatenate([event.get_prediction_weights(ts, slew=slew) for event in self.events])
 
         assert len(weights) == len(self.means)
         return numpy.matrix(weights)
