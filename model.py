@@ -154,6 +154,17 @@ class Arma(EventType):
             'past_epsilon': self.past_epsilon[:].tolist(),
         }
 
+class Constant(EventType):
+    def __init__(self):
+        pass
+    def get_prediction_weights(self, ts, slew=None):
+        return numpy.array([1])
+
+    def to_dict(self):
+        return {
+            'constant': True,
+        }
+
 class StatState(object):
     def __init__(self, event_config, state_file):
         self.load_state(event_config, state_file)
@@ -169,6 +180,8 @@ class StatState(object):
         for event in state_dict['events']:
             if event.get('arma'):
                 self.events.append(Arma(event['past_y'], event['past_epsilon']))
+            elif event.get('constant'):
+                self.events.append(Constant())
             elif event.get('periodic'):
                 self.events.append(PeriodicEvent(event['name'], event['duration'], event['num_steps']))
             else:
