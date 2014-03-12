@@ -8,7 +8,7 @@ Usage:
   main.py graph_predict_many <event_config> <state_file> <start> <length> <step>
   main.py get_weights <event_config> <state_file> [<ts>] [<slew>]
   main.py get_weights_many <event_config> <state_file> <start> <length> <step> [<slew>]
-  main.py train_from_rrd <event_config> <state_file> <rrd_file>
+  main.py train_from_rrd <event_config> <state_file> <rrd_file> [<column>]
   main.py graph_parameters <event_config> <state_file>
   main.py (-h | --help)
 
@@ -22,6 +22,7 @@ import model
 import time
 import rrd_dump
 import graph
+import sys
 
 
 def main(arguments):
@@ -88,8 +89,18 @@ def main(arguments):
             print ' '.join([("%0.2f " % weight) for weight in state.get_prediction_weights(ts, slew=slew).tolist()[0] ])
 
     elif arguments['train_from_rrd']:
-        for ts, value, timewindow in rrd_dump.parse_rrddump_output(rrd_dump.run_rrddump(arguments['<rrd_file>'])):
-            state.update(ts, value, slew=timewindow)
+        step_size, points = rrd_dump.parse_rrddump_output(rrd_dump.run_rrddump(arguments['<rrd_file>']))
+        col = arguments['<column>']
+        for ts, values, timewindow in points:
+            if not col:
+                if len(values.keys()) > 1:
+                    sys.stderr.write("You must specify a column to train from, since your RRD file has multiple columns.\n")
+                    sys.stderr.write("Columns: %s\n" % ', '.join(values.keys()))
+                    sys.exit(1)
+                else:
+                    (col,) = values.keys()
+
+            state.update(ts, values[col], slew=(timewindow if timewindow != step_size else None))
 
         state.save_state(arguments['<state_file>'])
     elif arguments['graph_parameters']:

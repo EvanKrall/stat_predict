@@ -3,25 +3,31 @@ from lxml import etree
 import sys
 import re
 import subprocess
-
+import json
 
 def parse_rrddump_output(stream):
     root = etree.parse(stream)
     step_size = float(root.find('step').text)
 
-    for rra in root.iter('rra'):
-        pdp_per_row = float(rra.find('pdp_per_row').text)
-        duration = step_size * pdp_per_row
+    col_names = [ds.find('name').text.strip() for ds in root.findall('ds')]
 
-        database = rra.find('database')
-        for row in database.iter('row'):
-            timestamp_comment = row.getprevious().text
-            (ts,) = re.match(r'.* / (\d+)\b', timestamp_comment).groups()
-            ts = float(ts)
+    def yield_points():
+        for rra in root.findall('rra'):
+            pdp_per_row = float(rra.find('pdp_per_row').text)
+            duration = step_size * pdp_per_row
 
-            value = float(row.find('v').text)
-            yield (ts, value, duration)
+            database = rra.find('database')
+            for row in database.findall('row'):
+                timestamp_comment = row.getprevious().text
+                (ts,) = re.match(r'.* / (\d+)\b', timestamp_comment).groups()
+                ts = float(ts)
 
+                values = {}
+                for i, v in enumerate(row.findall('v')):
+                    values[col_names[i]] = float(v.text)
+                yield (ts, values, duration)
+
+    return step_size, yield_points()
 
 def run_rrddump(filename):
     pipe = subprocess.Popen(["rrdtool", "dump", filename], stdout=subprocess.PIPE)
@@ -29,9 +35,8 @@ def run_rrddump(filename):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        stream = open(sys.argv[1])
-    else:
-        stream = sys.stdin
 
-    parse_rrddump_output(stream)
+    step_size, points = parse_rrddump_output(run_rrddump(sys.argv[1]))
+    for point in points:
+        print json.dumps(point)
+

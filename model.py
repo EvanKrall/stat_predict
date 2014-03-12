@@ -66,7 +66,7 @@ class EventType(object):
             'num_steps': self.num_steps
         }
 
-    def report_measurement_and_prediction_error(self, measurement, prediction_error):
+    def report_measurement_and_prediction_error(self, measurement, prediction_error, slew):
         # only AR / MA type events actually care about these.
         pass
 
@@ -138,13 +138,16 @@ class Arma(EventType):
         self.past_y = RingBuffer(p)
         self.past_epsilon = RingBuffer(q)
 
-    def report_measurement_and_prediction_error(self, measurement, prediction_error):
-        #http://stackoverflow.com/questions/8908998/ring-buffer-with-numpy-ctypes
-        self.past_y.push(measurement)   
-        self.past_epsilon.push(prediction_error)
+    def report_measurement_and_prediction_error(self, measurement, prediction_error, slew):
+        print '%f,%f,%f' % (measurement, prediction_error, slew or 0.0)
+        if not slew:
+            self.past_y.push(measurement or 0.0)
+            self.past_epsilon.push(prediction_error or 0.0)
 
     def get_prediction_weights(self, ts, slew=None):
-        # todo how the fuck am I going to do slew in ARMA
+        # if slew:
+        #     # todo is it possible to do slew at all in arma?
+        #     return numpy.zeros(len(self.past_y) + len(self.past_epsilon))
         return numpy.concatenate([self.past_y[:], self.past_epsilon[:]])
 
     def to_dict(self):
@@ -204,19 +207,22 @@ class StatState(object):
         }
 
     def update(self, ts, measurement, slew=None):
-        self.means, self.covariance, prediction_error = sorta_kalman(
-            self.means,
-            self.covariance,
-            measurement,
-            self.get_prediction_weights(ts, slew=slew),
-            self.measurement_noise
-        )
+        if not numpy.isnan(measurement):
+            self.means, self.covariance, prediction_error = sorta_kalman(
+                self.means,
+                self.covariance,
+                measurement,
+                self.get_prediction_weights(ts, slew=slew),
+                self.measurement_noise
+            )
 
-        self.report_measurement_and_prediction_error(measurement, prediction_error)
+            self.report_measurement_and_prediction_error(measurement, prediction_error, slew)
+        else:
+            self.report_measurement_and_prediction_error(numpy.nan, numpy.nan, slew)
 
-    def report_measurement_and_prediction_error(self, measurement, prediction_error):
+    def report_measurement_and_prediction_error(self, measurement, prediction_error, slew):
         for event in self.events:
-            event.report_measurement_and_prediction_error(measurement, prediction_error)
+            event.report_measurement_and_prediction_error(measurement, prediction_error, slew)
 
     def predict(self, ts):
         C_t = self.get_prediction_weights(ts)
