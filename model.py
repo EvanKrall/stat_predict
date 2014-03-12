@@ -67,10 +67,6 @@ class ImpulseModel(object):
             'num_steps': self.num_steps
         }
 
-    def report_measurement_and_prediction_error(self, measurement, prediction_error, slew):
-        # only AR / MA type events actually care about these.
-        pass
-
 class PeriodicModel(ImpulseModel):
     """Models a periodic trend, by breaking the period into a pre-defined number of blocks, and linearly interpolating between them."""
     def __init__(self, name, duration, num_steps):
@@ -141,10 +137,10 @@ class Arma(object):
         self.past_y = RingBuffer(p)
         self.past_epsilon = RingBuffer(q)
 
-    def report_measurement_and_prediction_error(self, measurement, prediction_error, slew):
-        print '%f,%f,%f' % (measurement, prediction_error, slew or 0.0)
+    def report(self, ts, measurement, exogenous, prediction_error, slew, predicted_value):
+        # print '%f,%f,%f,%f,%f,%f' % (ts, measurement, exogenous, prediction_error, predicted_value, slew or 0.0)
         if not slew:
-            self.past_y.push(measurement or 0.0)
+            self.past_y.push((measurement - exogenous) or 0.0)
             self.past_epsilon.push(prediction_error or 0.0)
 
     def get_prediction_weights(self, ts, slew=None):
@@ -219,24 +215,30 @@ class StatState(object):
                 self.measurement_noise
             )
 
-            self.report_measurement_and_prediction_error(measurement, prediction_error, slew)
+            self.report(ts, measurement, prediction_error, slew)
+
+            print ','.join('%f' % x for x in ([ts, measurement] + self.means.T.tolist()[0]))
         else:
-            self.report_measurement_and_prediction_error(numpy.nan, numpy.nan, slew)
+            self.report(ts, numpy.nan, numpy.nan, slew)
 
-    def report_measurement_and_prediction_error(self, measurement, prediction_error, slew):
+    def report(self, ts, measurement, prediction_error, slew):
         for event in self.events:
-            event.report_measurement_and_prediction_error(measurement, prediction_error, slew)
+            if hasattr(event, 'report'):
+                exogenous, _ = self.predict(ts, ignore=event)
+                predicted_value, _ = self.predict(ts)
+                event.report(ts, measurement, exogenous, prediction_error, slew, predicted_value)
 
-    def predict(self, ts):
-        C_t = self.get_prediction_weights(ts)
+    def predict(self, ts, slew=None, ignore=None):
+        C_t = self.get_prediction_weights(ts, slew=None, ignore=ignore)
 
         expected_value = C_t * self.means
         variance = C_t * self.covariance * C_t.T
 
         return expected_value, variance
 
-    def get_prediction_weights(self, ts, slew=None):
-        weights = numpy.concatenate([event.get_prediction_weights(ts, slew=slew) for event in self.events])
+    def get_prediction_weights(self, ts, slew=None, ignore=None):
+        # apologies for the really long one-liner.
+        weights = numpy.concatenate([(0 if (ignore == event) else 1) * event.get_prediction_weights(ts, slew=slew) for event in self.events])
 
         assert len(weights) == len(self.means)
         return numpy.matrix(weights)

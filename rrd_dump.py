@@ -17,6 +17,7 @@ def parse_rrddump_output(stream):
             duration = step_size * pdp_per_row
 
             database = rra.find('database')
+            seen_real_value = False
             for row in database.findall('row'):
                 timestamp_comment = row.getprevious().text
                 (ts,) = re.match(r'.* / (\d+)\b', timestamp_comment).groups()
@@ -24,8 +25,10 @@ def parse_rrddump_output(stream):
 
                 values = {}
                 for i, v in enumerate(row.findall('v')):
+                    seen_real_value = seen_real_value or v.text != "NaN"
                     values[col_names[i]] = float(v.text)
-                yield (ts, values, duration)
+                if seen_real_value:
+                    yield (ts, values, duration)
 
     return step_size, yield_points()
 

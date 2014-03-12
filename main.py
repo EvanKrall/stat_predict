@@ -23,7 +23,7 @@ import time
 import rrd_dump
 import graph
 import sys
-
+import itertools
 
 def main(arguments):
     state = model.StatState(
@@ -91,7 +91,19 @@ def main(arguments):
     elif arguments['train_from_rrd']:
         step_size, points = rrd_dump.parse_rrddump_output(rrd_dump.run_rrddump(arguments['<rrd_file>']))
         col = arguments['<column>']
-        for ts, values, timewindow in points:
+
+        points = list(points)
+        points.sort(key=lambda p: (p[0], p[2]))
+
+        def drop_later_lower_res(points):
+            """Throws out values with lower resolution (higher timewindow) than the most specific point we've seen before."""
+            highest_res = float('Inf')
+            for point in points:
+                highest_res = min(highest_res, point[2])
+                if point[2] <= highest_res:
+                    yield point
+
+        for ts, values, timewindow in drop_later_lower_res(points):
             if not col:
                 if len(values.keys()) > 1:
                     sys.stderr.write("You must specify a column to train from, since your RRD file has multiple columns.\n")
