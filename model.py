@@ -148,9 +148,9 @@ class Arma(object):
             self.past_epsilon.push(prediction_error or 0.0)
 
     def get_prediction_weights(self, ts, slew=None):
-        # if slew:
-        #     # todo is it possible to do slew at all in arma?
-        #     return numpy.zeros(len(self.past_y) + len(self.past_epsilon))
+        if slew:
+            # todo is it possible to do slew at all in arma?
+            return numpy.zeros(len(self.past_y) + len(self.past_epsilon))
         return numpy.concatenate([self.past_y[:], self.past_epsilon[:]])
 
     def to_dict(self):
