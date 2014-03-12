@@ -240,7 +240,6 @@ class StatState(object):
 
 
 def sorta_kalman(means, covariance, measurement, C_t, Q_t):
-    # import ipdb; ipdb.set_trace()
     kalman_gain = covariance * C_t.T * (C_t * covariance * C_t.T + Q_t).I
     prediction_error = measurement - C_t * means
     means = means + kalman_gain * (prediction_error)
