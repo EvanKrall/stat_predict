@@ -99,7 +99,7 @@ class RingBuffer(object):
     def __init__(self, size_or_list):
         if hasattr(size_or_list, '__iter__'):
             self.size = len(size_or_list)
-            self.buffer = numpy.concatenate([size_or_list, size_or_list])
+            self.buffer = numpy.concatenate([numpy.array(size_or_list, dtype='float64'), numpy.array(size_or_list, dtype='float64')])
             self.i = 0
         else:
             self.size = size_or_list
