@@ -9,6 +9,7 @@ Usage:
   main.py get_weights <event_config> <state_file> [<ts>] [<slew>]
   main.py get_weights_many <event_config> <state_file> <start> <length> <step> [<slew>]
   main.py train_from_rrd <event_config> <state_file> <rrd_file>
+  main.py graph_parameters <event_config> <state_file>
   main.py (-h | --help)
 
 Options:
@@ -91,6 +92,8 @@ def main(arguments):
             state.update(ts, value, slew=timewindow)
 
         state.save_state(arguments['<state_file>'])
+    elif arguments['graph_parameters']:
+        graph.graph_means_and_covariances(state.means, state.covariance)
 
 if __name__ == '__main__':
     arguments = docopt(__doc__, version="Stat predictor 1.0")
