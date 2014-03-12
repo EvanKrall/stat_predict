@@ -2,7 +2,8 @@
 import numpy
 import yaml
 
-class EventType(object):
+class ImpulseModel(object):
+    """Models an impulse to a type of event, e.g. a deployment, by breaking the period directly after the event into a set number of chunks."""
     def __init__(self, name, duration, num_steps, event_log_filename):
         self.name = name
         self.duration = duration
@@ -70,8 +71,8 @@ class EventType(object):
         # only AR / MA type events actually care about these.
         pass
 
-class PeriodicEvent(EventType):
-    # worlds worst OO hierarchy
+class PeriodicModel(ImpulseModel):
+    """Models a periodic trend, by breaking the period into a pre-defined number of blocks, and linearly interpolating between them."""
     def __init__(self, name, duration, num_steps):
         self.name = name
         self.duration = duration
@@ -96,6 +97,7 @@ class PeriodicEvent(EventType):
 
 
 class RingBuffer(object):
+    """a convenient way to store the last N things. Should have fast, constant-time access."""
     def __init__(self, size_or_list):
         if hasattr(size_or_list, '__iter__'):
             self.size = len(size_or_list)
@@ -133,7 +135,8 @@ class RingBuffer(object):
         return self.buffer[self.i : self.i + self.size].__iter__()
 
 
-class Arma(EventType):
+class Arma(object):
+    """Auto-regressive moving average model."""
     def __init__(self, p, q):
         self.past_y = RingBuffer(p)
         self.past_epsilon = RingBuffer(q)
@@ -157,7 +160,7 @@ class Arma(EventType):
             'past_epsilon': self.past_epsilon[:].tolist(),
         }
 
-class Constant(EventType):
+class Constant(ImpulseModel):
     def __init__(self):
         pass
     def get_prediction_weights(self, ts, slew=None):
@@ -186,9 +189,9 @@ class StatState(object):
             elif event.get('constant'):
                 self.events.append(Constant())
             elif event.get('periodic'):
-                self.events.append(PeriodicEvent(event['name'], event['duration'], event['num_steps']))
+                self.events.append(PeriodicModel(event['name'], event['duration'], event['num_steps']))
             else:
-                self.events.append(EventType(event['name'], event['duration'], event['num_steps'], event_config_dict[event['name']]))
+                self.events.append(ImpulseModel(event['name'], event['duration'], event['num_steps'], event_config_dict[event['name']]))
 
         self.means = numpy.matrix(state_dict['means']).T
         self.covariance = numpy.matrix(state_dict['covariance'])
