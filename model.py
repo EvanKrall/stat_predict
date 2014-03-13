@@ -25,7 +25,7 @@ class ImpulseModel(object):
                 yield event_ts
 
     def get_prediction_weights(self, ts, slew=None):
-
+        # Todo: steal the rewritten weight/slew code from the PeriodicModel.
         weights = [0] * self.num_steps
         step_length = float(self.duration / self.num_steps)
 
@@ -67,7 +67,7 @@ class ImpulseModel(object):
             'num_steps': self.num_steps
         }
 
-class PeriodicModel(ImpulseModel):
+class PeriodicModel(object):
     """Models a periodic trend, by breaking the period into a pre-defined number of blocks, and linearly interpolating between them."""
     def __init__(self, name, duration, num_steps):
         self.name = name
@@ -75,13 +75,26 @@ class PeriodicModel(ImpulseModel):
         self.num_steps = num_steps
         self.periodic = True
 
-    def get_timestamps_in_window(self, begin, end):
-        first_timestamp = int(begin / self.duration) * self.duration
-        if first_timestamp < begin:
-            first_timestamp += self.duration
-        assert begin <= first_timestamp
-        assert first_timestamp < end
-        return numpy.arange(first_timestamp, end, self.duration)
+    def get_prediction_weights(self, ts, slew=None):
+        ts = float(ts)
+        weights = numpy.zeros(self.num_steps)
+
+        if slew:
+            for coeff, time in slew_ts(ts, slew, (self.duration / self.num_steps / 12)):
+                weights += coeff * self.get_prediction_weights(time)
+            return weights
+        else:
+            step_length = self.duration / float(self.num_steps)
+
+            weight_right = (ts % step_length) / step_length
+            weight_left = 1.0 - weight_right
+
+            left = numpy.floor((ts % self.duration) / self.duration * self.num_steps)
+            right = (left+1) % self.num_steps
+
+            weights[left] = weight_left
+            weights[right] = weight_right
+            return weights
 
     def to_dict(self):
         return {
@@ -90,6 +103,18 @@ class PeriodicModel(ImpulseModel):
             'num_steps': self.num_steps,
             'periodic': True,
         }
+
+def slew_ts(ts, slew, resolution):
+    if slew < resolution:
+        return [(1.0, ts + slew / 2.0)]
+
+    times = numpy.arange(
+        ts,
+        ts + slew,
+        resolution
+    )
+    return ((1.0/len(times), time) for time in times)
+
 
 
 class RingBuffer(object):
