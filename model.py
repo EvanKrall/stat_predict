@@ -116,7 +116,6 @@ def slew_ts(ts, slew, resolution):
     return ((1.0/len(times), time) for time in times)
 
 
-
 class RingBuffer(object):
     """a convenient way to store the last N things. Should have fast, constant-time access."""
     def __init__(self, size_or_list):
