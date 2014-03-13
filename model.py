@@ -11,6 +11,9 @@ class ImpulseModel(object):
         self.periodic = False
         self.event_log_filename = event_log_filename
 
+    def copy(self):
+        return ImpulseModel(self.name, self.duration, self.num_steps, self.periodic, self.event_log_filename)
+
     def get_timestamps(self):
         # todo use a database or something.
         with open(self.event_log_filename) as event_log:
@@ -74,6 +77,9 @@ class PeriodicModel(object):
         self.duration = duration
         self.num_steps = num_steps
         self.periodic = True
+
+    def copy(self):
+        return PeriodicModel(self.name, self.duration, self.num_steps)
 
     def get_prediction_weights(self, ts, slew=None):
         ts = float(ts)
@@ -161,7 +167,10 @@ class Arma(object):
         self.past_y = RingBuffer(p)
         self.past_epsilon = RingBuffer(q)
 
-    def report(self, ts, measurement, exogenous, prediction_error, slew, predicted_value):
+    def copy(self):
+        return Arma(self.past_y[:], self.past_epsilon[:])
+
+    def report(self, ts, measurement, exogenous, prediction_error, slew):
         # print '%f,%f,%f,%f,%f,%f' % (ts, measurement, exogenous, prediction_error, predicted_value, slew or 0.0)
         if not slew:
             self.past_y.push((measurement - exogenous) or 0.0)
@@ -183,6 +192,8 @@ class Arma(object):
 class Constant(ImpulseModel):
     def __init__(self):
         pass
+    def copy(self):
+        return self
     def get_prediction_weights(self, ts, slew=None):
         return numpy.array([1])
 
@@ -250,7 +261,7 @@ class StatState(object):
             if hasattr(event, 'report'):
                 exogenous, _ = self.predict(ts, ignore=event)
                 predicted_value, _ = self.predict(ts)
-                event.report(ts, measurement, exogenous, prediction_error, slew, predicted_value)
+                event.report(ts, measurement, exogenous, prediction_error, slew)
 
     def predict(self, ts, slew=None, ignore=None):
         C_t = self.get_prediction_weights(ts, slew=None, ignore=ignore)
@@ -259,6 +270,35 @@ class StatState(object):
         variance = C_t * self.covariance * C_t.T
 
         return expected_value, variance
+
+    def predict_monte_carlo(self, begin, end, resolution, epsilon_scale):
+        # sample parameters from means/covariances
+        sample = numpy.matrix(numpy.random.multivariate_normal(numpy.array(self.means.flat), self.covariance))
+        # sample = numpy.matrix(self.means.flat)
+        
+        # create new copy of each event. (man, I really need to rename 'event' to something else)
+        events = [event.copy() for event in self.events]
+
+        # simulate
+        for ts in numpy.arange(begin, end, resolution):
+            weights = numpy.matrix(numpy.concatenate([event.get_prediction_weights(ts) for event in events]))
+            predicted_value = weights * sample.T
+
+            yield predicted_value.flat[0]
+
+            epsilon = epsilon_scale * numpy.random.normal()
+
+            for event in events:
+                if hasattr(event, 'report'):
+                    other_weights = numpy.matrix(numpy.concatenate([(0 if (event == e) else 1) * e.get_prediction_weights(ts) for e in events]))
+                    exogenous = other_weights * sample.T
+                    event.report(
+                        ts,
+                        predicted_value + epsilon,
+                        exogenous,
+                        epsilon,
+                        0.0,
+                    )
 
     def get_prediction_weights(self, ts, slew=None, ignore=None):
         # apologies for the really long one-liner.
