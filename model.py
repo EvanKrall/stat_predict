@@ -252,7 +252,7 @@ class StatState(object):
 
             self.report(ts, measurement, prediction_error, slew)
 
-            print ','.join('%f' % x for x in ([ts, measurement] + self.means.T.tolist()[0]))
+            print ','.join('%f' % x for x in ([ts, measurement, prediction_error] + self.means.T.tolist()[0]))
         else:
             self.report(ts, numpy.nan, numpy.nan, slew)
 
