@@ -210,6 +210,9 @@ class StatState(object):
         with open(state_filename) as state_file:
             state_dict = yaml.load(state_file)
 
+        self.ts = state_dict.get('ts', 0)
+        self.resolution = state_dict.get('resolution', None)
+
         with open(event_config_filename) as event_config:
             event_config_dict = yaml.load(event_config)
 
@@ -228,19 +231,33 @@ class StatState(object):
         self.covariance = numpy.matrix(state_dict['covariance'])
         self.measurement_noise = state_dict['measurement_noise']
 
+        self.variance_alpha = state_dict['variance_alpha']
+        self.variance_ewma = state_dict.get('variance_ewma', None)
+
     def save_state(self, state_filename):
         with open(state_filename, 'w+') as state_file:
             yaml.dump(self.to_dict(), stream=state_file)
 
     def to_dict(self):
         return {
+            'ts': self.ts,
+            'resolution': self.resolution,
             'events': [event.to_dict() for event in self.events],
             'means': self.means.T.tolist(),
             'covariance': self.covariance.tolist(),
             'measurement_noise': self.measurement_noise,
+            'variance_alpha': self.variance_alpha,
+            'variance_ewma': float(self.variance_ewma),
         }
 
     def update(self, ts, measurement, slew=None):
+        if ts < self.ts:
+            raise ValueError("You're trying to go back in time! %f < %f" % (ts, self.ts))
+
+        self.resolution = ts - self.ts
+        self.ts = ts
+        assert slew <= self.resolution
+
         if not numpy.isnan(measurement):
             self.means, self.covariance, prediction_error = sorta_kalman(
                 self.means,
@@ -257,6 +274,11 @@ class StatState(object):
             self.report(ts, numpy.nan, numpy.nan, slew)
 
     def report(self, ts, measurement, prediction_error, slew):
+        if self.variance_ewma is not None:
+            self.variance_ewma = self.variance_ewma * self.variance_alpha + (prediction_error ** 2) * (1.0 - self.variance_alpha)
+        else:
+            self.variance_ewma = (prediction_error ** 2)
+
         for event in self.events:
             if hasattr(event, 'report'):
                 exogenous, _ = self.predict(ts, ignore=event)
@@ -271,22 +293,22 @@ class StatState(object):
 
         return expected_value, variance
 
-    def predict_monte_carlo(self, begin, end, resolution, epsilon_scale):
+    def predict_monte_carlo(self, length):
         # sample parameters from means/covariances
-        sample = numpy.matrix(numpy.random.multivariate_normal(numpy.array(self.means.flat), self.covariance))
-        # sample = numpy.matrix(self.means.flat)
-        
+        sample = numpy.matrix(self.means.flat)
+        # sample = numpy.matrix(numpy.random.multivariate_normal(numpy.array(self.means.flat), self.covariance))
+
         # create new copy of each event. (man, I really need to rename 'event' to something else)
         events = [event.copy() for event in self.events]
 
         # simulate
-        for ts in numpy.arange(begin, end, resolution):
+        for ts in numpy.arange(self.ts, self.ts + length, self.resolution):
             weights = numpy.matrix(numpy.concatenate([event.get_prediction_weights(ts) for event in events]))
             predicted_value = weights * sample.T
 
             yield predicted_value.flat[0]
 
-            epsilon = epsilon_scale * numpy.random.normal()
+            epsilon = numpy.sqrt(self.variance_alpha) * numpy.random.normal()
 
             for event in events:
                 if hasattr(event, 'report'):

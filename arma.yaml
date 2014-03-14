@@ -50,3 +50,4 @@ events:
 - {arma: true, past_y: [0.0,0.0,0.0,0.0,0.0], past_epsilon: [0,0,0,0,0]}
 - {duration: 86400, name: day, num_steps: 12, periodic: true}
 measurement_noise: 0.001
+variance_alpha: 0.999
