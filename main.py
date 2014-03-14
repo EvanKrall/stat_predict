@@ -23,10 +23,10 @@ import time
 import rrd_dump
 import graph
 import sys
-import itertools
+
 
 def main(arguments):
-    state = model.StatState(
+    state = model.StatState.load_state(
         arguments['<event_config>'],
         arguments['<state_file>'],
     )

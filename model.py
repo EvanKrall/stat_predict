@@ -202,19 +202,21 @@ class Constant(ImpulseModel):
             'constant': True,
         }
 
-class StatState(object):
-    def __init__(self, event_config, state_file):
-        self.load_state(event_config, state_file)
 
-    def load_state(self, event_config_filename, state_filename):
+class StatState(object):
+    @classmethod
+    def load_state(cls, event_config_filename, state_filename):
         with open(state_filename) as state_file:
             state_dict = yaml.load(state_file)
 
-        self.ts = state_dict.get('ts', 0)
-        self.resolution = state_dict.get('resolution', None)
-
         with open(event_config_filename) as event_config:
             event_config_dict = yaml.load(event_config)
+
+        return cls(state_dict, event_config_dict)
+
+    def __init__(self, state_dict, event_config_dict):
+        self.ts = state_dict.get('ts', 0)
+        self.resolution = state_dict.get('resolution', None)
 
         self.events = []
         for event in state_dict['events']:
